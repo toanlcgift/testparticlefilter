@@ -1,0 +1,13 @@
+﻿################################################################################
+# This .gitignore file was automatically created by Microsoft(R) Visual Studio.
+################################################################################
+
+/proj.win32/Debug.win32
+/proj.win32/.vs/testparticlefilter/v16
+/proj.win32
+/proj.linux
+/proj.ios_mac
+/proj.android
+/cocos2d
+/CMakeLists.txt
+/.cocos-project.json
