@@ -129,25 +129,36 @@ void HelloWorld::InitValue() {
 		cout << "error: could not open map file" << endl;
 		return;
 	}
+
+	auto visibleSize = Director::getInstance()->getVisibleSize();
+
 	for (int i = 0; i < map.landmark_list.size(); i++) {
 		auto sprite = Sprite::create("dot.png");
-		sprite->setPosition(map.landmark_list.at(i).x_f, map.landmark_list.at(i).y_f);
+		sprite->setScale(0.1f);
+		sprite->setPosition(map.landmark_list.at(i).x_f + visibleSize.width / 2, map.landmark_list.at(i).y_f + visibleSize.height / 2);
 		this->addChild(sprite);
 	}
-	//
-	//// read position data
-	//vector<control_s> position_meas;
-	//if (!read_control_data("data/control_data.txt", position_meas)) {
-	//	cout << "error: could not open position/control measurement file" << endl;
-	//	return;
-	//}
+	
+	// read position data
+	vector<control_s> position_meas;
+	if (!read_control_data("data/control_data.txt", position_meas)) {
+		cout << "error: could not open position/control measurement file" << endl;
+		return;
+	}
 
-	//// read ground truth data
-	//vector<ground_truth> gt;
-	//if (!read_gt_data("data/gt_data.txt", gt)) {
-	//	cout << "error: could not open ground truth data file" << endl;
-	//	return;
-	//}
+	// read ground truth data
+	vector<ground_truth> gt;
+	if (!read_gt_data("data/gt_data.txt", gt)) {
+		cout << "error: could not open ground truth data file" << endl;
+		return;
+	}
+
+	for (int i = 0; i < gt.size(); i++) {
+		auto sprite = Sprite::create("temp.png");
+		sprite->setScale(0.001f);
+		sprite->setPosition(gt.at(i).x + visibleSize.width / 2, gt.at(i).y + visibleSize.height / 2);
+		this->addChild(sprite);
+	}
 
 	//// run particle filter!
 	//int num_time_steps = position_meas.size();
