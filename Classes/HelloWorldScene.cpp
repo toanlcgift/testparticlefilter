@@ -153,113 +153,118 @@ void HelloWorld::InitValue() {
 		return;
 	}
 
-	for (int i = 0; i < gt.size(); i++) {
+	/*for (int i = 0; i < gt.size(); i++) {
 		auto sprite = Sprite::create("temp.png");
 		sprite->setScale(0.001f);
 		sprite->setPosition(gt.at(i).x + visibleSize.width / 2, gt.at(i).y + visibleSize.height / 2);
 		this->addChild(sprite);
+	}*/
+
+	// run particle filter!
+	int num_time_steps = position_meas.size();
+	ParticleFilter pf;
+	double total_error[3] = { 0,0,0 };
+	double cum_mean_error[3] = { 0,0,0 };
+
+	for (int i = 0; i < num_time_steps; ++i) {
+		cout << "time step: " << i << endl;
+		// read in landmark observations for current time step.
+		ostringstream file;
+		file << "data/observation/observations_" << setfill('0') << setw(6) << i + 1 << ".txt";
+		vector<LandmarkObs> observations;
+		if (!read_landmark_data(file.str(), observations)) {
+			cout << "error: could not open observation file " << i + 1 << endl;
+			return;
+		}
+
+		// initialize particle filter if this is the first time step.
+		if (!pf.initialized()) {
+			n_x = n_x_init(gen);
+			n_y = n_y_init(gen);
+			n_theta = n_theta_init(gen);
+			pf.init(gt[i].x + n_x, gt[i].y + n_y, gt[i].theta + n_theta, sigma_pos);
+		}
+		else {
+			// predict the vehicle's next state (noiseless).
+			pf.prediction(delta_t, sigma_pos, position_meas[i - 1].velocity, position_meas[i - 1].yawrate);
+		}
+		// simulate the addition of noise to noiseless observation data.
+		vector<LandmarkObs> noisy_observations;
+		LandmarkObs obs;
+		for (int j = 0; j < observations.size(); ++j) {
+			n_x = n_obs_x(gen);
+			n_y = n_obs_y(gen);
+			obs = observations[j];
+			obs.x = obs.x + n_x;
+			obs.y = obs.y + n_y;
+			noisy_observations.push_back(obs);
+		}
+
+		// update the weights and resample
+		pf.updateWeights(sensor_range, sigma_landmark, noisy_observations, map);
+		pf.resample();
+
+		// calculate and output the average weighted error of the particle filter over all time steps so far.
+		vector<Particle> particles = pf.particles;
+		int num_particles = particles.size();
+		double highest_weight = 0.0;
+		Particle best_particle;
+		for (int i = 0; i < num_particles; ++i) {
+			if (particles[i].weight > highest_weight) {
+				highest_weight = particles[i].weight;
+				best_particle = particles[i];
+				auto spiteRes = Sprite::create("temp.png");
+				spiteRes->setScale(0.001f);
+				spiteRes->setPosition(particles[i].x + visibleSize.width / 2, particles[i].y + visibleSize.height / 2);
+				this->addChild(spiteRes);
+			}
+		}
+		double* avg_error = getError(gt[i].x, gt[i].y, gt[i].theta, best_particle.x, best_particle.y, best_particle.theta);
+
+		for (int j = 0; j < 3; ++j) {
+			total_error[j] += avg_error[j];
+			cum_mean_error[j] = total_error[j] / (double)(i + 1);
+		}
+
+		// print the cumulative weighted error
+		cout << "cumulative mean weighted error: x " << cum_mean_error[0] << " y " << cum_mean_error[1] << " yaw " << cum_mean_error[2] << endl;
+		
+		// if the error is too high, say so and then exit.
+		if (i >= time_steps_before_lock_required) {
+			if (cum_mean_error[0] > max_translation_error || cum_mean_error[1] > max_translation_error || cum_mean_error[2] > max_yaw_error) {
+				if (cum_mean_error[0] > max_translation_error) {
+					cout << "your x error, " << cum_mean_error[0] << " is larger than the maximum allowable error, " << max_translation_error << endl;
+				}
+				else if (cum_mean_error[1] > max_translation_error) {
+					cout << "your y error, " << cum_mean_error[1] << " is larger than the maximum allowable error, " << max_translation_error << endl;
+				}
+				else {
+					cout << "your yaw error, " << cum_mean_error[2] << " is larger than the maximum allowable error, " << max_yaw_error << endl;
+				}
+
+				return;
+			}
+		}
 	}
 
-	//// run particle filter!
-	//int num_time_steps = position_meas.size();
-	//ParticleFilter pf;
-	//double total_error[3] = { 0,0,0 };
-	//double cum_mean_error[3] = { 0,0,0 };
+	// output the runtime for the filter.
+	int stop = clock();
+	double runtime = (stop - start) / double(CLOCKS_PER_SEC);
+	cout << "runtime (sec): " << runtime << endl;
 
-	//for (int i = 0; i < num_time_steps; ++i) {
-	//	cout << "time step: " << i << endl;
-	//	// read in landmark observations for current time step.
-	//	ostringstream file;
-	//	file << "data/observation/observations_" << setfill('0') << setw(6) << i + 1 << ".txt";
-	//	vector<LandmarkObs> observations;
-	//	if (!read_landmark_data(file.str(), observations)) {
-	//		cout << "error: could not open observation file " << i + 1 << endl;
-	//		return;
-	//	}
+	// print success if accuracy and runtime are sufficient (and this isn't just the starter code).
+	if (runtime < max_runtime && pf.initialized()) {
+		cout << "success! your particle filter passed!" << endl;
+	}
+	else if (!pf.initialized()) {
+		cout << "this is the starter code. you haven't initialized your filter." << endl;
+	}
+	else {
+		cout << "your runtime " << runtime << " is larger than the maximum allowable runtime, " << max_runtime << endl;
+		return;
+	}
 
-	//	// initialize particle filter if this is the first time step.
-	//	if (!pf.initialized()) {
-	//		n_x = n_x_init(gen);
-	//		n_y = n_y_init(gen);
-	//		n_theta = n_theta_init(gen);
-	//		pf.init(gt[i].x + n_x, gt[i].y + n_y, gt[i].theta + n_theta, sigma_pos);
-	//	}
-	//	else {
-	//		// predict the vehicle's next state (noiseless).
-	//		pf.prediction(delta_t, sigma_pos, position_meas[i - 1].velocity, position_meas[i - 1].yawrate);
-	//	}
-	//	// simulate the addition of noise to noiseless observation data.
-	//	vector<LandmarkObs> noisy_observations;
-	//	LandmarkObs obs;
-	//	for (int j = 0; j < observations.size(); ++j) {
-	//		n_x = n_obs_x(gen);
-	//		n_y = n_obs_y(gen);
-	//		obs = observations[j];
-	//		obs.x = obs.x + n_x;
-	//		obs.y = obs.y + n_y;
-	//		noisy_observations.push_back(obs);
-	//	}
-
-	//	// update the weights and resample
-	//	pf.updateWeights(sensor_range, sigma_landmark, noisy_observations, map);
-	//	pf.resample();
-
-	//	// calculate and output the average weighted error of the particle filter over all time steps so far.
-	//	vector<Particle> particles = pf.particles;
-	//	int num_particles = particles.size();
-	//	double highest_weight = 0.0;
-	//	Particle best_particle;
-	//	for (int i = 0; i < num_particles; ++i) {
-	//		if (particles[i].weight > highest_weight) {
-	//			highest_weight = particles[i].weight;
-	//			best_particle = particles[i];
-	//		}
-	//	}
-	//	double* avg_error = getError(gt[i].x, gt[i].y, gt[i].theta, best_particle.x, best_particle.y, best_particle.theta);
-
-	//	for (int j = 0; j < 3; ++j) {
-	//		total_error[j] += avg_error[j];
-	//		cum_mean_error[j] = total_error[j] / (double)(i + 1);
-	//	}
-
-	//	// print the cumulative weighted error
-	//	cout << "cumulative mean weighted error: x " << cum_mean_error[0] << " y " << cum_mean_error[1] << " yaw " << cum_mean_error[2] << endl;
-
-	//	// if the error is too high, say so and then exit.
-	//	if (i >= time_steps_before_lock_required) {
-	//		if (cum_mean_error[0] > max_translation_error || cum_mean_error[1] > max_translation_error || cum_mean_error[2] > max_yaw_error) {
-	//			if (cum_mean_error[0] > max_translation_error) {
-	//				cout << "your x error, " << cum_mean_error[0] << " is larger than the maximum allowable error, " << max_translation_error << endl;
-	//			}
-	//			else if (cum_mean_error[1] > max_translation_error) {
-	//				cout << "your y error, " << cum_mean_error[1] << " is larger than the maximum allowable error, " << max_translation_error << endl;
-	//			}
-	//			else {
-	//				cout << "your yaw error, " << cum_mean_error[2] << " is larger than the maximum allowable error, " << max_yaw_error << endl;
-	//			}
-	//			return;
-	//		}
-	//	}
-	//}
-
-	//// output the runtime for the filter.
-	//int stop = clock();
-	//double runtime = (stop - start) / double(CLOCKS_PER_SEC);
-	//cout << "runtime (sec): " << runtime << endl;
-
-	//// print success if accuracy and runtime are sufficient (and this isn't just the starter code).
-	//if (runtime < max_runtime && pf.initialized()) {
-	//	cout << "success! your particle filter passed!" << endl;
-	//}
-	//else if (!pf.initialized()) {
-	//	cout << "this is the starter code. you haven't initialized your filter." << endl;
-	//}
-	//else {
-	//	cout << "your runtime " << runtime << " is larger than the maximum allowable runtime, " << max_runtime << endl;
-	//	return;
-	//}
-
-	//return;
+	return;
 }
 
 void HelloWorld::menuCloseCallback(Ref* pSender)
